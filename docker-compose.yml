@@ -1,0 +1,80 @@
+version: "3.9"
+
+# ============================================================
+# TRI-TIER PRIVATE AI GATEWAY
+# Controller: OpenClaw (host)
+# Private Layer: Ollama + Llama 3.1 8B (local/sensitive)
+# Intelligence Layer: Together AI Qwen-2.5-72B (cloud/reasoning)
+# Router: LiteLLM (self-hosted, $0)
+# ============================================================
+
+networks:
+  ai_internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  ollama_data:
+  litellm_data:
+
+services:
+
+  # ----------------------------------------------------------
+  # PRIVATE LAYER: Ollama (local model inference)
+  # Handles all sensitive/PII/financial prompts
+  # Never exposed to public internet
+  # ----------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    networks:
+      ai_internal:
+        ipv4_address: 172.30.0.2
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "127.0.0.1:11434:11434"   # Loopback only — host (OpenClaw) reaches this
+    restart: unless-stopped
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_NUM_PARALLEL=2
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ----------------------------------------------------------
+  # ROUTER: LiteLLM proxy ($0 open-source)
+  # Routes sensitive prompts → Ollama
+  # Routes reasoning prompts → Together AI
+  # ZDR headers added to all Together AI requests
+  # ----------------------------------------------------------
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: litellm
+    networks:
+      ai_internal:
+        ipv4_address: 172.30.0.3
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+      - ./router_hook.py:/app/router_hook.py:ro
+      - litellm_data:/app/data
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY}
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--detailed_debug"]
+    ports:
+      - "127.0.0.1:4000:4000"     # Loopback only — OpenClaw on host reaches this
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
