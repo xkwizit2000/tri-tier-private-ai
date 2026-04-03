@@ -1,0 +1,71 @@
+# ============================================================
+# LITELLM ROUTER CONFIG — Tri-Tier Private AI Gateway
+# ============================================================
+
+model_list:
+
+  # ----------------------------------------------------------
+  # PRIVATE LAYER: Local Ollama (sensitive/PII traffic)
+  # Keyword router diverts here automatically
+  # ----------------------------------------------------------
+  - model_name: local-private
+    litellm_params:
+      model: ollama/gemma4:e4b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      description: "Local Gemma 4 E4B — handles PII, financial, tax, private data"
+      privacy: "local-only"
+
+  # ----------------------------------------------------------
+  # INTELLIGENCE LAYER: Together AI (reasoning/large context)
+  # ZDR enforced at account level + header signal
+  # Keyword router blocks sensitive content from reaching here
+  # ----------------------------------------------------------
+  - model_name: cloud-reasoning
+    litellm_params:
+      model: together_ai/Qwen/Qwen2.5-72B-Instruct-Turbo
+      api_key: os.environ/TOGETHER_API_KEY
+      extra_headers:
+        X-Together-No-Store: "true"       # Belt-and-suspenders ZDR signal
+        X-Title: "TriTier-Private-Gateway"
+    model_info:
+      description: "Together AI Qwen-2.5-72B — reasoning, large context, non-sensitive"
+      privacy: "zdr-enabled"
+
+# ----------------------------------------------------------
+# ROUTER SETTINGS
+# ----------------------------------------------------------
+router_settings:
+  routing_strategy: usage-based-routing
+  num_retries: 2
+  retry_after: 5
+  fallbacks:
+    - cloud-reasoning:
+        - local-private              # Falls back to local if Together AI is down
+
+# ----------------------------------------------------------
+# LITELLM GLOBAL SETTINGS
+# ----------------------------------------------------------
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+  # Zero external logging — no data leaves to telemetry services
+  success_callback: []
+  failure_callback: []
+  callbacks: []
+
+  # Request timeout (seconds)
+  request_timeout: 120
+
+  # Disable LiteLLM's own prompt caching to prevent retention
+  cache: false
+
+# ----------------------------------------------------------
+# GENERAL SETTINGS
+# ----------------------------------------------------------
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  disable_spend_logs: true          # No spend logging to external services
+  disable_error_logs: false         # Keep local error logs for debugging
+
