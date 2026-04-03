@@ -1,80 +1,71 @@
-version: "3.9"
-
 # ============================================================
-# TRI-TIER PRIVATE AI GATEWAY
-# Controller: OpenClaw (host)
-# Private Layer: Ollama + Llama 3.1 8B (local/sensitive)
-# Intelligence Layer: Together AI Qwen-2.5-72B (cloud/reasoning)
-# Router: LiteLLM (self-hosted, $0)
+# LITELLM ROUTER CONFIG — Tri-Tier Private AI Gateway
 # ============================================================
 
-networks:
-  ai_internal:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
-
-volumes:
-  ollama_data:
-  litellm_data:
-
-services:
+model_list:
 
   # ----------------------------------------------------------
-  # PRIVATE LAYER: Ollama (local model inference)
-  # Handles all sensitive/PII/financial prompts
-  # Never exposed to public internet
+  # PRIVATE LAYER: Local Ollama (sensitive/PII traffic)
+  # Keyword router diverts here automatically
   # ----------------------------------------------------------
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    networks:
-      ai_internal:
-        ipv4_address: 172.30.0.2
-    volumes:
-      - ollama_data:/root/.ollama
-    ports:
-      - "127.0.0.1:11434:11434"   # Loopback only — host (OpenClaw) reaches this
-    restart: unless-stopped
-    environment:
-      - OLLAMA_KEEP_ALIVE=24h
-      - OLLAMA_NUM_PARALLEL=2
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  - model_name: local-private
+    litellm_params:
+      model: ollama/gemma4:e4b
+      api_base: http://127.0.0.1:11434
+    model_info:
+      description: "Local Gemma 4 E4B — handles PII, financial, tax, private data"
+      privacy: "local-only"
 
   # ----------------------------------------------------------
-  # ROUTER: LiteLLM proxy ($0 open-source)
-  # Routes sensitive prompts → Ollama
-  # Routes reasoning prompts → Together AI
-  # ZDR headers added to all Together AI requests
+  # INTELLIGENCE LAYER: Together AI (reasoning/large context)
+  # ZDR enforced at account level + header signal
+  # Keyword router blocks sensitive content from reaching here
   # ----------------------------------------------------------
-  litellm:
-    image: ghcr.io/berriai/litellm:main-latest
-    container_name: litellm
-    networks:
-      ai_internal:
-        ipv4_address: 172.30.0.3
-    volumes:
-      - ./litellm_config.yaml:/app/config.yaml:ro
-      - ./router_hook.py:/app/router_hook.py:ro
-      - litellm_data:/app/data
-    environment:
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - TOGETHER_API_KEY=${TOGETHER_API_KEY}
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--detailed_debug"]
-    ports:
-      - "127.0.0.1:4000:4000"     # Loopback only — OpenClaw on host reaches this
-    depends_on:
-      ollama:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  - model_name: cloud-reasoning
+    litellm_params:
+      model: together_ai/Qwen/Qwen2.5-72B-Instruct-Turbo
+      api_key: os.environ/TOGETHER_API_KEY
+      extra_headers:
+        X-Together-No-Store: "true"       # Belt-and-suspenders ZDR signal
+        X-Title: "TriTier-Private-Gateway"
+    model_info:
+      description: "Together AI Qwen-2.5-72B — reasoning, large context, non-sensitive"
+      privacy: "zdr-enabled"
+
+# ----------------------------------------------------------
+# ROUTER SETTINGS
+# ----------------------------------------------------------
+router_settings:
+  routing_strategy: usage-based-routing
+  num_retries: 2
+  retry_after: 5
+  fallbacks:
+    - cloud-reasoning:
+        - local-private              # Falls back to local if Together AI is down
+
+# ----------------------------------------------------------
+# LITELLM GLOBAL SETTINGS
+# ----------------------------------------------------------
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+  # Zero external logging — no data leaves to telemetry services
+  success_callback: []
+  failure_callback: []
+  callbacks: []
+
+  # Request timeout (seconds)
+  request_timeout: 120
+
+  # Disable LiteLLM's own prompt caching to prevent retention
+  cache: false
+
+# ----------------------------------------------------------
+# GENERAL SETTINGS
+# ----------------------------------------------------------
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  disable_spend_logs: true          # No spend logging to external services
+  disable_error_logs: false         # Keep local error logs for debugging
 
