@@ -17,7 +17,7 @@ You (Tailscale only)
      │           │
      ▼           ▼
  Ollama        Together AI
- Llama 3.1 8B  Qwen-2.5-72B
+ Gemma 4 E4B   Qwen-2.5-72B
  [Private]     [Cloud / ZDR]
 ```
 
@@ -25,7 +25,7 @@ You (Tailscale only)
 |---|---|---|---|
 | Controller | OpenClaw | Orchestration, agent routing, UI | $0 |
 | Router | LiteLLM (self-hosted) | Keyword-based model routing | $0 |
-| Private Layer | Ollama + Llama 3.1 8B | Sensitive / PII / financial prompts | $0 |
+| Private Layer | Ollama + Gemma 4 E4B | Sensitive / PII / financial prompts | $0 |
 | Intelligence Layer | Together AI Qwen-2.5-72B | Reasoning, large context, non-sensitive | Pay-per-token |
 | Infrastructure | VPS (Ubuntu 22.04) | Hosts everything | ~$6–10/mo |
 
@@ -137,10 +137,10 @@ docker compose ps        # Both services should show "healthy"
 ### 7. Pull the local model
 
 ```bash
-docker exec -it ollama ollama pull llama3.1:8b
+docker exec -it ollama ollama pull gemma4:e4b
 ```
 
-This downloads approximately 4.7GB. Allow 5–10 minutes depending on your VPS bandwidth.
+This downloads approximately 3.8GB. Allow 5–10 minutes depending on your VPS bandwidth.
 
 ### 8. Connect OpenClaw to LiteLLM
 
