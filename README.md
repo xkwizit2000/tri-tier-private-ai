@@ -267,7 +267,7 @@ Confirm Tailscale is running on both your VPS and your local machine. Access via
 | Together AI Qwen-2.5-72B input | ~$0.90 / 1M tokens |
 | Together AI Qwen-2.5-72B output | ~$0.90 / 1M tokens |
 | Ollama / LiteLLM / OpenClaw | $0 |
-| Hetzner CX21 VPS (4GB RAM) | ~$6–10/mo |
+| Hetzner CX21 VPS (8GB RAM) | ~$10/mo |
 
 At ~500K tokens/month cloud usage, total cost lands around **$10–12/month**.
 
