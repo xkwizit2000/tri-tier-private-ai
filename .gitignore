@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# MiniDB runtime files
+*.json
+*.lock
+*.lock.sentinel
+*.tmp
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+#junk
+
+ISSUES.md
+promote.sh
+
+#secrets
+.secrets/
