@@ -1,0 +1,8 @@
+export HCLOUD_TOKEN=$(cat .secrets/tritier_hetzner_key)
+export TAILSCALE_AUTHKEY=$(cat .secrets/tailscale_key)
+export SERVER_NAME="tritier-ai-gateway"
+export SERVER_TYPE="cx33"               
+export LOCATION="nbg1"                   # Options: ash (US), fsn1, nbg1, hel1, sin
+export IMAGE="ubuntu-22.04"
+export SSH_KEY_NAME="mykey"
+export SSH_KEY_PATH="$HOME/.ssh/id_rsa"
