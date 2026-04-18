@@ -106,8 +106,10 @@ sudo ufw status verbose
 ### 4. Install OpenClaw
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw/main/install.sh | bash
-openclaw doctor
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash -
+sudo apt-get install -y nodejs
+sudo npm install -g openclaw@latest
+openclaw --version
 ```
 
 ### 5. Configure environment
