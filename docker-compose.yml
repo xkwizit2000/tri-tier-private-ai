@@ -1,5 +1,3 @@
-version: "3.9"
-
 networks:
   ai_internal:
     driver: bridge
@@ -28,10 +26,11 @@ services:
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_NUM_PARALLEL=2
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 30s
-      timeout: 10s
-      retries: 3
+      timeout: 20s
+      retries: 5
+      start_period: 30s
 
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
@@ -42,11 +41,15 @@ services:
     volumes:
       - ./litellm_config.yaml:/app/config.yaml:ro
       - ./router_hook.py:/app/router_hook.py:ro
+      - ./entrypoint.py:/app/entrypoint.py:ro
       - litellm_data:/app/data
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY}
-    command: ["--config", "/app/config.yaml", "--port", "4000"]
+      - PYTHONPATH=/app
+      - PORT=4000
+    entrypoint: ["python3", "/app/entrypoint.py"]
+    command: []
     ports:
       - "127.0.0.1:4000:4000"
     depends_on:
