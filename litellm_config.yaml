@@ -2,12 +2,12 @@ model_list:
 
   - model_name: local-private
     litellm_params:
-      model: ollama/tinyllama
+      model: ollama/phi3:mini
       api_base: http://ollama:11434
 
   - model_name: cloud-reasoning
     litellm_params:
-      model: together_ai/Qwen/Qwen2.5-7B-Instruct-Turbo
+      model: together_ai/Qwen/Qwen3.5-397B-A17B
       api_key: os.environ/TOGETHER_API_KEY
       extra_headers:
         X-Together-No-Store: "true"
