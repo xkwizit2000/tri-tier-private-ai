@@ -4,7 +4,33 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased] - 2026-04-21
+## 2026-04-21 (middle tier)
+
+### Added
+- **Middle tier** (`cloud-middle`) in `litellm_config.yaml` —
+  `together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo` with the same ZDR
+  headers as the heavy tier.
+- **Automatic middle/heavy routing** in `router_hook.py` for non-`[priv]`
+  prompts, using the local Ollama model as a complexity classifier:
+  1. Hardcoded heuristic short-circuits (obvious SIMPLE: short greetings,
+     simple factual questions, basic arithmetic; obvious COMPLEX: long
+     prompts, code fences, multi-question prompts, reasoning/design hints).
+  2. If no heuristic fires, a one-token classifier call to Ollama
+     (`gemma3n:e4b` by default) returns `SIMPLE` or `COMPLEX`.
+  3. SIMPLE → `cloud-middle`; COMPLEX → `cloud-reasoning`.
+- **Classification cache** — in-memory SHA-256 keyed, 5-minute TTL, so
+  repeats of the same prompt skip the classifier call.
+- Environment overrides for the classifier: `CLASSIFIER_OLLAMA_URL`,
+  `CLASSIFIER_OLLAMA_MODEL`, `CLASSIFIER_TIMEOUT_S`.
+
+### Changed
+- `router_hook.py` now uses `httpx.AsyncClient` to talk to Ollama for the
+  classifier step, avoiding re-entry through the LiteLLM proxy (which would
+  recurse into the pre-call hook).
+- `[priv]` routing is unchanged and still takes precedence — the classifier
+  only runs on non-private prompts.
+
+## 2026-04-21
 
 ### Added
 - `[priv]` prefix routing: prompts beginning with `[priv]` are routed to the
