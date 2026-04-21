@@ -2,7 +2,7 @@ model_list:
 
   - model_name: local-private
     litellm_params:
-      model: ollama/phi3:mini
+      model: ollama/gemma4:e4b
       api_base: http://ollama:11434
 
   - model_name: cloud-reasoning
@@ -23,6 +23,7 @@ litellm_settings:
   set_verbose: true
   request_timeout: 120
   cache: false
+  callbacks: router_hook.proxy_handler_instance
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
