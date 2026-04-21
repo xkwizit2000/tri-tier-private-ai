@@ -5,15 +5,7 @@ model_list:
       model: ollama/gemma4:e4b
       api_base: http://ollama:11434
 
-  - model_name: cloud-middle
-    litellm_params:
-      model: together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo
-      api_key: os.environ/TOGETHER_API_KEY
-      extra_headers:
-        X-Together-No-Store: "true"
-        X-Title: "TriTier-Private-Gateway"
-
-  - model_name: cloud-heavy
+  - model_name: cloud-reasoning
     litellm_params:
       model: together_ai/Qwen/Qwen3.5-397B-A17B
       api_key: os.environ/TOGETHER_API_KEY
