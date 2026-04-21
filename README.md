@@ -17,7 +17,7 @@ You (Tailscale only)
      │           │
      ▼           ▼
  Ollama        Together AI
- gemma4:e4b   Qwen-3.5-397B
+ gemma3n:e4b   Qwen-3.5-397B
  [Private]     [Cloud / ZDR]
 ```
 
