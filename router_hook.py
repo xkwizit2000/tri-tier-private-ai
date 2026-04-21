@@ -139,6 +139,32 @@ async def _decide_non_private_tier(text):
     _cache_set(key, decision)
     return decision, "classifier"
 
+def _strip_envelope(text):
+    """Strip OpenClaw/Telegram metadata envelope to get actual user message."""
+    if not isinstance(text, str):
+        return text
+    
+    # If no envelope markers, return as-is
+    if "Conversation info (untrusted metadata)" not in text:
+        return text
+    
+    # Try to extract the actual message content
+    # Look for the last clean line that's not metadata
+    lines = text.split("\n")
+    for line in reversed(lines):
+        stripped = line.strip()
+        if stripped and len(stripped) < 200:
+            # Skip metadata lines
+            if stripped.startswith(("```", "{", "[", "Conversation", "Sender", "label", "---")):
+                continue
+            # Skip JSON-like lines
+            if ":" in stripped and stripped.count('"') > 2:
+                continue
+            return stripped
+    
+    # Fallback: return original if we couldn't find clean text
+    return text
+
 
 async def _route(data):
     print(f"[PrivacyRouter] >>> ROUTE keys={list(data.keys())} model_in={data.get('model')!r}", flush=True)
@@ -190,7 +216,10 @@ async def _route(data):
         print(f"[PrivacyRouter] empty user text -> {MODEL_MIDDLE}", flush=True)
         return data
 
-    decision, reason = await _decide_non_private_tier(user_text)
+    # Strip Envelope prior to routing decision
+    clean_text = _strip_envelope(user_text)
+
+    decision, reason = await _decide_non_private_tier(clean_text)
     target = MODEL_HEAVY if decision == "complex" else MODEL_MIDDLE
     data["model"] = target
     print(f"[PrivacyRouter] non-priv decision={decision} ({reason}) -> {target}", flush=True)
