@@ -188,13 +188,125 @@ write_files:
       ufw status verbose
 
       echo "==> Installing OpenClaw..."
-      sudo -u deploy bash -c 'curl -fsSL https://raw.githubusercontent.com/openclaw/openclaw/main/install.sh | bash' || true
+      curl -fsSL https://deb.nodesource.com/setup_24.x | bash - 
+      apt-get install -y nodejs
+      npm install -g openclaw@latest
+      openclaw --version
+      sudo -u deploy bash -c 'mkdir /home/deploy/.openclaw'
 
       echo "==> Creating project directory..."
       mkdir -p /home/deploy/tritier
       chown deploy:deploy /home/deploy/tritier
 
       echo "==> Stack install complete"
+  - path: /home/deploy/.openclaw/openclaw.json  
+    permissions: '0755'
+    content: |
+      {
+        "agents": {
+          "defaults": {
+            "workspace": "/home/deploy/.openclaw/workspace",
+            "models": {
+              "litellm/claude-opus-4-6": {
+                "alias": "LiteLLM"
+              },
+              "cloud-reasoning": {}
+            },
+            "model": {
+              "primary": "litellm/cloud-reasoning"
+            },
+            "params": {
+              "tool_choice": "none"
+            }
+          }
+        },
+        "gateway": {
+          "mode": "local",
+          "auth": {
+            "mode": "token",
+            "token": "openclaw-gateway-token"
+          },
+          "port": 18789,
+          "bind": "loopback",
+          "tailscale": {
+            "mode": "off",
+            "resetOnExit": false
+          },
+          "controlUi": {
+            "allowInsecureAuth": true
+          },
+          "nodes": {
+            "denyCommands": [
+              "camera.snap",
+              "camera.clip",
+              "screen.record",
+              "contacts.add",
+              "calendar.add",
+              "reminders.add",
+              "sms.send",
+              "sms.search"
+            ]
+          }
+        },
+        "session": {
+          "dmScope": "per-channel-peer"
+        },
+        "tools": {
+          "profile": "full"
+        },
+        "models": {
+          "mode": "merge",
+          "providers": {
+            "litellm": {
+              "baseUrl": "http://localhost:4000/v1",
+              "api": "openai-completions",
+              "models": [
+                {
+                  "id": "cloud-reasoning",
+                  "name": "Tri-Tier Router"
+                }
+              ],
+              "apiKey": "litellm_master_key"
+            }
+          }
+        },
+        "auth": {
+          "profiles": {
+            "litellm:default": {
+              "provider": "litellm",
+              "mode": "api_key"
+            }
+          }
+        },
+        "channels": {
+          "telegram": {
+            "enabled": true,
+            "groups": {
+              "*": {
+                "requireMention": true
+              }
+            },
+            "botToken": "telegram_bot_token"
+          }
+        },
+        "hooks": {
+          "internal": {
+            "enabled": true,
+            "entries": {
+              "session-memory": {
+                "enabled": true
+              }
+            }
+          }
+        },
+        "plugins": {
+          "entries": {
+            "litellm": {
+              "enabled": true
+            }
+          }
+        }
+      }          
 
 runcmd:
   - bash /opt/tritier/install_stack.sh
