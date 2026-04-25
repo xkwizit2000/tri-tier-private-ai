@@ -13,7 +13,6 @@ STRIP_FOR_OLLAMA = (
     "response_format", "parallel_tool_calls",
 )
 
-
 def _safe_dump(obj, limit=4000):
     try:
         s = json.dumps(obj, default=str)
@@ -43,7 +42,8 @@ def _strip_prefix_in_place(obj):
     elif isinstance(obj, list):
         for v in obj:
             _strip_prefix_in_place(v)
-
+def extract_chat_id(data):
+    return data["metadata"]["chat_id"]
 
 def _route(data):
     print(f"[PrivacyRouter] >>> ROUTE keys={list(data.keys())} model_in={data.get('model')!r}", flush=True)
@@ -97,8 +97,8 @@ def _route(data):
               f"last_user_len={len(str(last_user.get('content', ''))) if last_user else 0}",
               flush=True)
     else:
-        print("[PrivacyRouter] no [priv] in payload -> cloud-reasoning", flush=True)
-        data["model"] = "cloud-reasoning"
+        print("[PrivacyRouter] no [priv] in payload -> cloud-simple", flush=True)
+        data["model"] = "cloud-simple"
 
     return data
 

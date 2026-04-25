@@ -1,0 +1,68 @@
+#!/bin/bash
+#
+# Manage litellm 
+
+cd ~/tritier
+
+if [[ -r .env ]]
+then
+  set -a
+  source .env
+  set +a
+fi
+
+help() {
+	echo "$0 <command>"
+	echo "commands: "
+	echo ""
+	echo "start	Start full stack ollama and litellm"
+	echo "stop	Stop full stack ollama and litellm"
+	echo "restart	restart ollama and litellm"
+	echo "restart-llm	restart litellm only"
+	echo "models	Show configured litellm models"
+	echo "help	This help info."
+}
+
+start() {
+        docker compose up -d
+}
+
+stop() {
+       docker compose down
+}
+
+restart() {
+	stop
+	start
+}
+
+restart-llm() {
+        docker restart litellm
+}
+
+
+logs() {
+       docker logs -f litellm
+}
+
+models() {
+	grep "model" litellm_config.yaml
+}
+
+if [[ $# -lt 1 ]]
+then
+	help
+	exit 1
+else
+	case $1 in
+		start) start;;
+		stop)  stop;;
+		restart) stop ; start ;;
+		restart-llm) restart-llm ;;
+		models) models ;;
+		logs)  logs ;;
+		help)  help ; exit 0;;
+		*)     help ; exit 1;;
+        esac
+fi
+

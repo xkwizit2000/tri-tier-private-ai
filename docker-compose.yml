@@ -25,6 +25,7 @@ services:
     environment:
       - OLLAMA_KEEP_ALIVE=24h
       - OLLAMA_NUM_PARALLEL=2
+      - CLASSIFIER_OLLAMA_MODEL=gemma4:e4b
     healthcheck:
       test: ["CMD-SHELL", "ollama list || exit 1"]
       interval: 30s
@@ -42,12 +43,14 @@ services:
       - ./litellm_config.yaml:/app/config.yaml:ro
       - ./router_hook.py:/app/router_hook.py:ro
       - ./entrypoint.py:/app/entrypoint.py:ro
-      - litellm_data:/app/data
+      - ./data:/app/data
+      - ./minidb.py:/app/minidb.py
     environment:
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - TOGETHER_API_KEY=${TOGETHER_API_KEY}
       - PYTHONPATH=/app
       - PORT=4000
+      - CLASSIFIER_OLLAMA_MODEL=gemma4:e4b
     entrypoint: ["python3", "/app/entrypoint.py"]
     command: []
     ports:

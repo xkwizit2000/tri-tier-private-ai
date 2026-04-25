@@ -5,7 +5,7 @@ model_list:
       model: ollama/gemma4:e4b
       api_base: http://ollama:11434
 
-  - model_name: cloud-reasoning
+  - model_name: cloud-simple
     litellm_params:
       model: together_ai/Qwen/Qwen3.5-397B-A17B
       api_key: os.environ/TOGETHER_API_KEY
@@ -20,10 +20,13 @@ router_settings:
 
 litellm_settings:
   drop_params: true
-  set_verbose: true
+  set_verbose: false
   request_timeout: 120
   cache: false
   callbacks: router_hook.proxy_handler_instance
+
+database_url: "sqlite:///litellm.db"
+
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
