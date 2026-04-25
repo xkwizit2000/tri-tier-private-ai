@@ -31,6 +31,32 @@ def _walk_strings(obj):
         for v in obj:
             yield from _walk_strings(v)
 
+def _strip_envelope(text):
+    """Strip OpenClaw/Telegram metadata envelope to get actual user message."""
+    if not isinstance(text, str):
+        return text
+    
+    # If no envelope markers, return as-is
+    if "Conversation info (untrusted metadata)" not in text:
+        return text
+    
+    # Try to extract the actual message content
+    # Look for the last clean line that's not metadata
+    lines = text.split("\n")
+    for line in reversed(lines):
+        stripped = line.strip()
+        if stripped and len(stripped) < 200:
+            # Skip metadata lines
+            if stripped.startswith(("```", "{", "[", "Conversation", "Sender", "label", "---")):
+                continue
+            # Skip JSON-like lines
+            if ":" in stripped and stripped.count('"') > 2:
+                continue
+            return stripped
+    
+    # Fallback: return original if we couldn't find clean text
+    return text
+
 
 def _strip_prefix_in_place(obj):
     if isinstance(obj, dict):
@@ -100,6 +126,21 @@ def _route(data):
         print("[PrivacyRouter] no [priv] in payload -> cloud-simple", flush=True)
         data["model"] = "cloud-simple"
 
+<<<<<<< HEAD
+=======
+    if not user_text.strip():
+        data["model"] = MODEL_MIDDLE
+        print(f"[PrivacyRouter] empty user text -> {MODEL_MIDDLE}", flush=True)
+        return data
+
+    # Strip Envelope prior to routing decision
+    clean_text = _strip_envelope(user_text)
+
+    decision, reason = await _decide_non_private_tier(clean_text)
+    target = MODEL_HEAVY if decision == "complex" else MODEL_MIDDLE
+    data["model"] = target
+    print(f"[PrivacyRouter] non-priv decision={decision} ({reason}) -> {target}", flush=True)
+>>>>>>> 3e2f47b3fb659d3d85cbe3e4d4dc8cdd23d01fae
     return data
 
 
