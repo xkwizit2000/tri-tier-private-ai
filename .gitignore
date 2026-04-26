@@ -40,4 +40,4 @@ promote.sh
 #secrets
 .secrets/
 provision.config
-tri-tier-private-ai\tri-tier-private-ai.code-workspace
+*.code-workspace
