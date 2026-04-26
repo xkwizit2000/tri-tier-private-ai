@@ -1,5 +1,5 @@
 
-def _extract_user_message_text(content) -> str:
+def extract_user_message_text(content) -> str:
     """Extract the actual user message text from content that may include OpenClaw metadata wrapper.
     
     OpenClaw wraps user messages with metadata like:

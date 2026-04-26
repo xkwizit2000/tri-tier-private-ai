@@ -4,7 +4,7 @@ import re
 import urllib.request
 from litellm.integrations.custom_logger import CustomLogger
 
-from utils.privacy import _extract_user_message_text
+from utils.privacy import extract_user_message_text
 
 # Simple in-memory cache for classification results
 CLASSIFICATION_CACHE = {}
@@ -205,7 +205,7 @@ def _route(data):
         print(f"[PrivacyRouter] >>> DEBUG: Raw content type: {type(content)}", flush=True)
         
         # Extract the actual user message text (may include OpenClaw metadata wrapper)
-        user_text = _extract_user_message_text(content)
+        user_text = extract_user_message_text(content)
         print(f"[PrivacyRouter] >>> DEBUG: Extracted user text: '{user_text[:100]}...'", flush=True)
         
         if isinstance(content, str):

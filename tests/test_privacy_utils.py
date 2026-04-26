@@ -1,4 +1,4 @@
-from utils.privacy import _extract_user_message_text
+from utils.privacy import extract_user_message_text
 
 
 def test_extract_from_wrapped_string():
