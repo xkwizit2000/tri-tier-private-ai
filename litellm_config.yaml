@@ -13,6 +13,14 @@ model_list:
         X-Together-No-Store: "true"
         X-Title: "TriTier-Private-Gateway"
 
+  - model_name: cloud-complex
+    litellm_params:
+      model: together_ai/Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8
+      api_key: os.environ/TOGETHER_API_KEY
+      extra_headers:
+        X-Together-No-Store: "true"
+        X-Title: "TriTier-Private-Gateway"
+
 router_settings:
   routing_strategy: usage-based-routing
   num_retries: 2
@@ -24,9 +32,6 @@ litellm_settings:
   request_timeout: 120
   cache: false
   callbacks: router_hook.proxy_handler_instance
-
-database_url: "sqlite:///litellm.db"
-
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
