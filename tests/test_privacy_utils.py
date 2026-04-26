@@ -14,7 +14,7 @@ Sender (untrusted metadata):
 
 [priv] actual message
 """
-    assert _extract_user_message_text(content) == "[priv] actual message"
+    assert extract_user_message_text(content) == "[priv] actual message"
 
 
 def test_extract_from_list_content():
@@ -29,14 +29,14 @@ def test_extract_from_list_content():
         },
         {"type": "text", "text": "real user text"},
     ]
-    assert _extract_user_message_text(content) == "real user text"
+    assert extract_user_message_text(content) == "real user text"
 
 
 def test_passthrough_when_no_metadata():
     content = "plain user text"
-    assert _extract_user_message_text(content) == "plain user text"
+    assert extract_user_message_text(content) == "plain user text"
 
 
 def test_fallback_on_malformed_block():
     content = "Conversation info (untrusted metadata):\n```json\n{bad\nplain fallback"
-    assert _extract_user_message_text(content) == content
+    assert extract_user_message_text(content) == content
