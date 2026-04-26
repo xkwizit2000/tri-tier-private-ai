@@ -4,7 +4,25 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [2.0.1] - 2026-04-26 - Tri-Tier Privacy Platform
+## [2.0.1] - 2026-04-26 - Bugfix Issue #5
+
+**[priv] prefix detection with OpenClaw metadata wrappers** (2026-04-26):
+  - **Problem**: OpenClaw wraps user messages with metadata headers before sending to litellm:
+    ```
+    Conversation info (untrusted metadata):
+    ```json
+    {...}
+    ```
+    Sender (untrusted metadata):
+    ```json
+    {...}
+    ```
+    The actual user message (e.g., `[priv] hi`) comes **after** these metadata blocks. The router was checking the first 100 chars of raw content, which contained the metadata header instead of the user's message, causing `[priv]` detection to always fail.
+  - **Solution**: Added `_extract_user_message_text(content)` function that identifies metadata headers, skips past the ```json ... ``` blocks, and returns the remaining text (the actual user message). Modified `_route()` to check the extracted user text for `[priv]` prefix instead of raw content.
+  - **File**: `/home/deploy/tri-tier-private-ai/router_hook.py`
+  - **Result**: `[priv]` messages now correctly route to `local-private` model (ollama/gemma4:e4b)
+
+## [2.0.0] - 2026-04-26 = Tri-Tier Privacy Platform
 
 ### Added
 - **Three-tier routing architecture**: local-private, cloud-simple, cloud-complex
@@ -36,21 +54,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Memory file duplication**: Documented append-only strategy for `memory/2026-04-26.md`
 - **Ollama high CPU usage**: Resolved with classification optimizations (caching + lighter model)
 - **Privacy detection scope**: Only checks beginning of last user message, not entire conversation context
-- **[priv] prefix detection with OpenClaw metadata wrappers** (2026-04-26):
-  - **Problem**: OpenClaw wraps user messages with metadata headers before sending to litellm:
-    ```
-    Conversation info (untrusted metadata):
-    ```json
-    {...}
-    ```
-    Sender (untrusted metadata):
-    ```json
-    {...}
-    ```
-    The actual user message (e.g., `[priv] hi`) comes **after** these metadata blocks. The router was checking the first 100 chars of raw content, which contained the metadata header instead of the user's message, causing `[priv]` detection to always fail.
-  - **Solution**: Added `_extract_user_message_text(content)` function that identifies metadata headers, skips past the ```json ... ``` blocks, and returns the remaining text (the actual user message). Modified `_route()` to check the extracted user text for `[priv]` prefix instead of raw content.
-  - **File**: `/home/deploy/tri-tier-private-ai/router_hook.py`
-  - **Result**: `[priv]` messages now correctly route to `local-private` model (ollama/gemma4:e4b)
 
 ### Performance Improvements
 - **Classification speed**: 457ms-2s (gemma4:e2b) vs 9+ seconds (gemma4:e4b) - 5-10x faster
