@@ -23,7 +23,7 @@ You (Tailscale only)
  Gemma 4 E4B   Qwen 3.5     Qwen3-Coder
  [Private]     [Simple]     [Complex]
                397B-A17B    480B-A35B FP8
-
+```
 ### Three-Tier Routing
 
 The platform routes queries through three pathways:
@@ -59,8 +59,8 @@ Prompt starts with [priv] prefix
         ├── YES → Ollama (local, air-gapped)
         │
         └── NO  → Complexity Classifier → Simple/Complex → Together AI (ZDR enabled)
-```
 
+```
 ### Cloud Privacy Protections
 
 Even for non-sensitive queries that reach the cloud, Together AI provides:
