@@ -18,6 +18,9 @@ build/
 .venv/
 venv/
 env/
+.env
+.env.*
+!.env.example
 
 # IDE
 .vscode/
@@ -37,3 +40,4 @@ promote.sh
 #secrets
 .secrets/
 provision.config
+tri-tier-private-ai\tri-tier-private-ai.code-workspace
