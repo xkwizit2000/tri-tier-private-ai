@@ -1,18 +1,37 @@
 import json
 import logging
 import re
+import urllib.request
 from litellm.integrations.custom_logger import CustomLogger
+
+# Simple in-memory cache for classification results
+CLASSIFICATION_CACHE = {}
+CACHE_MAX_SIZE = 100
+CACHE_TTL_SECONDS = 300  # 5 minutes
+import time
+
+# Import local memory module for [priv] conversation storage
+try:
+    from local_memory import store_message, load_context
+    LOCAL_MEMORY_ENABLED = True
+    print("[PrivacyRouter] Local memory module loaded", flush=True)
+except ImportError as e:
+    LOCAL_MEMORY_ENABLED = False
+    print(f"[PrivacyRouter] Local memory module not available: {e}", flush=True)
 
 print("[PrivacyRouter] MODULE LOADED", flush=True)
 logger = logging.getLogger(__name__)
 
-PRIV_PREFIX = re.compile(r"\[priv\]\s*", re.IGNORECASE)
+# Ollama endpoint for classification
+OLLAMA_CLASSIFIER_URL = "http://ollama:11434/api/generate"
+CLASSIFIER_MODEL = "gemma4:e2b"  # Lighter 2B model for faster classification
+
+PRIV_PREFIX = re.compile(r"^\s*\[priv\]\s*", re.IGNORECASE)
 
 STRIP_FOR_OLLAMA = (
     "tools", "tool_choice", "functions", "function_call",
     "response_format", "parallel_tool_calls",
 )
-
 
 def _safe_dump(obj, limit=4000):
     try:
@@ -43,7 +62,128 @@ def _strip_prefix_in_place(obj):
     elif isinstance(obj, list):
         for v in obj:
             _strip_prefix_in_place(v)
+def extract_chat_id(data):
+    """Extract chat ID from request metadata."""
+    try:
+        return data.get("metadata", {}).get("chat_id", "unknown")
+    except Exception:
+        return "unknown"
 
+
+CLASSIFICATION_PROMPT = """You are a query complexity classifier. Analyze the user's message and classify it as either "simple" or "complex".
+
+**Simple queries:**
+- Single factual question
+- Basic greeting or acknowledgment
+- Simple preference or preference check
+- Short, straightforward requests
+- Casual conversation
+
+**Complex queries:**
+- Multiple questions in one message
+- Requires analysis, comparison, or synthesis
+- Technical domains (code, math, research, architecture)
+- Detailed explanations or step-by-step reasoning
+- Creative work (stories, plans, designs)
+- Ambiguous or nuanced topics requiring judgment
+
+Respond with exactly one word: "simple" or "complex".
+
+User message: {message}
+"""
+
+
+def classify_complexity(message_content) -> str:
+    """
+    Classify message complexity using Ollama.
+    Returns "simple" or "complex".
+    Falls back to "simple" if classification fails.
+    """
+    # Convert list content to string (Telegram messages arrive as lists)
+    if isinstance(message_content, list):
+        # Extract text from list parts
+        text_parts = []
+        for part in message_content:
+            if isinstance(part, dict) and part.get("type") in ("text", "input_text"):
+                text_parts.append(part.get("text", ""))
+            elif isinstance(part, str):
+                text_parts.append(part)
+        message_str = "\n".join(text_parts)
+        print(f"[PrivacyRouter] Extracted text from list: '{message_str[:50]}...' (len={len(message_str)})", flush=True)
+    else:
+        message_str = str(message_content)
+        print(f"[PrivacyRouter] Content is string: '{message_str[:50]}...' (len={len(message_str)})", flush=True)
+    
+    # Skip classification for very short messages (likely greetings/simple acks)
+    if len(message_str.strip()) < 10:
+        print(f"[PrivacyRouter] Skipping classification for short message: '{message_str[:20]}...'", flush=True)
+        return "simple"
+    
+    # Check cache first
+    message_key = message_str.strip()[:100]  # Use first 100 chars as cache key
+    current_time = time.time()
+    
+    # Clean up expired cache entries
+    expired_keys = [k for k, v in CLASSIFICATION_CACHE.items() if current_time - v['timestamp'] > CACHE_TTL_SECONDS]
+    for key in expired_keys:
+        del CLASSIFICATION_CACHE[key]
+    
+    # Return cached result if available
+    if message_key in CLASSIFICATION_CACHE:
+        cached_result = CLASSIFICATION_CACHE[message_key]
+        print(f"[PrivacyRouter] Using cached classification: {cached_result['result']} for '{message_key[:20]}...'", flush=True)
+        return cached_result['result']
+    
+    try:
+        # Prepare the classification prompt
+        prompt = CLASSIFICATION_PROMPT.format(message=message_str[:500])  # Truncate long messages
+        
+        # Call Ollama API
+        request_data = {
+            "model": CLASSIFIER_MODEL,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.1,  # Low temperature for consistent classification
+                "num_predict": 10    # Only need a few tokens
+            }
+        }
+        
+        req = urllib.request.Request(
+            OLLAMA_CLASSIFIER_URL,
+            data=json.dumps(request_data).encode('utf-8'),
+            headers={'Content-Type': 'application/json'}
+        )
+        
+        with urllib.request.urlopen(req, timeout=6) as response:
+            result = json.loads(response.read().decode('utf-8'))
+            """
+            fix AttributeError: 'list' object has no attribute 'strip' 
+            by converting into string """
+            classification = str(result.get("response", "simple")).strip().lower()
+            
+            # Extract just "simple" or "complex" from response
+            if "complex" in classification:
+                result = "complex"
+            else:
+                result = "simple"
+            
+            # Cache the result
+            if len(CLASSIFICATION_CACHE) >= CACHE_MAX_SIZE:
+                # Remove oldest entry if cache is full
+                oldest_key = min(CLASSIFICATION_CACHE.keys(), key=lambda k: CLASSIFICATION_CACHE[k]['timestamp'])
+                del CLASSIFICATION_CACHE[oldest_key]
+            
+            CLASSIFICATION_CACHE[message_key] = {
+                'result': result,
+                'timestamp': current_time
+            }
+            
+            return result
+    
+    except Exception as e:
+        print(f"[PrivacyRouter] Classification failed: {e} -> fallback to simple", flush=True)
+        return "simple"  # Fallback to simple if classification fails
 
 def _route(data):
     print(f"[PrivacyRouter] >>> ROUTE keys={list(data.keys())} model_in={data.get('model')!r}", flush=True)
@@ -58,20 +198,67 @@ def _route(data):
     is_private = False
     if last_user_idx is not None:
         content = msgs[last_user_idx].get("content", "")
+        print(f"[PrivacyRouter] >>> DEBUG: Raw content type: {type(content)}", flush=True)
         if isinstance(content, str):
+            # Check only the beginning of the content for [priv] prefix
             is_private = bool(PRIV_PREFIX.search(content))
+            # Debug: log what we're checking
+            check_content = content[:100]
+            match = PRIV_PREFIX.search(content)
+            if match:
+                print(f"[PrivacyRouter] >>> FOUND [priv] match at start: '{match.group()}'", flush=True)
+            print(f"[PrivacyRouter] >>> Checking content for [priv] at start: {check_content}... match={is_private}", flush=True)
         elif isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict) and part.get("type") in ("text", "input_text"):
-                    if PRIV_PREFIX.search(part.get("text", "")):
-                        is_private = True
-                        break
+            print(f"[PrivacyRouter] >>> DEBUG: Content is list, checking first part only...", flush=True)
+            # For list content, check only the first part and only at the beginning
+            if content and isinstance(content[0], dict) and content[0].get("type") in ("text", "input_text"):
+                text_content = content[0].get("text", "")
+                check_content = text_content[:100]
+                match = PRIV_PREFIX.search(text_content)
+                if match:
+                    print(f"[PrivacyRouter] >>> FOUND [priv] match at start: '{match.group()}'", flush=True)
+                    is_private = True
+                print(f"[PrivacyRouter] >>> Checking first part for [priv] at start: {check_content}... match={is_private}", flush=True)
+            else:
+                print(f"[PrivacyRouter] >>> DEBUG: First part is not text type", flush=True)
+        else:
+            print(f"[PrivacyRouter] >>> DEBUG: Unexpected content type: {type(content)}", flush=True)
+    else:
+        print(f"[PrivacyRouter] >>> DEBUG: No last user message found", flush=True)
 
     print(f"[PrivacyRouter] >>> private={is_private} (checked last user message only)", flush=True)
 
     if is_private:
         print("[PrivacyRouter] *** [priv] -> local-private", flush=True)
+        
+        # Extract chat ID for memory storage
+        chat_id = extract_chat_id(data)
+        
+        # Get the user's message content (before stripping [priv])
+        user_content = msgs[last_user_idx].get("content", "")
+        
+        # Store this message in local memory
+        if LOCAL_MEMORY_ENABLED:
+            try:
+                store_message(chat_id, "user", user_content)
+                print(f"[PrivacyRouter] Stored user message in local memory: {chat_id}", flush=True)
+            except Exception as e:
+                print(f"[PrivacyRouter] Failed to store message: {e}", flush=True)
+        
+        # Strip [priv] prefix from the message
         _strip_prefix_in_place(msgs[last_user_idx])
+        
+        # Load prior context from local memory
+        prior_context = ""
+        if LOCAL_MEMORY_ENABLED:
+            try:
+                prior_context = load_context(chat_id, limit=10)
+                if prior_context:
+                    context_lines = len(prior_context.split('\n'))
+                    print(f"[PrivacyRouter] Loaded {context_lines} prior messages from local memory", flush=True)
+            except Exception as e:
+                print(f"[PrivacyRouter] Failed to load context: {e}", flush=True)
+        
         data["model"] = "local-private"
         for k in STRIP_FOR_OLLAMA:
             data.pop(k, None)
@@ -82,10 +269,19 @@ def _route(data):
              if isinstance(m, dict) and m.get("role") == "user"),
             None,
         )
+        
+        # Build system prompt with context injection
+        if prior_context:
+            system_content = (f"You are a private, local assistant. Answer the user concisely. "
+                              f"You have no tools. You have access to prior conversation history below:\n\n"
+                              f"{prior_context}\n\n")
+        else:
+            system_content = "You are a private, local assistant. Answer the user concisely. You have no tools and no prior conversation context."
+        
         data["messages"] = [
             {
                 "role": "system",
-                "content": "You are a private, local assistant. Answer the user concisely. You have no tools and no prior conversation context.",
+                "content": system_content,
             },
         ]
         if last_user is not None:
@@ -93,12 +289,30 @@ def _route(data):
 
         data.pop("max_completion_tokens", None)
         data.setdefault("max_tokens", 512)
+        context_lines = len(prior_context.split('\n')) if prior_context else 0
+        last_user_len = len(str(last_user.get('content', ''))) if last_user else 0
         print(f"[PrivacyRouter] *** local payload msgs={len(data['messages'])} "
-              f"last_user_len={len(str(last_user.get('content', ''))) if last_user else 0}",
+              f"last_user_len={last_user_len} "
+              f"context_lines={context_lines}",
               flush=True)
     else:
-        print("[PrivacyRouter] no [priv] in payload -> cloud-reasoning", flush=True)
-        data["model"] = "cloud-reasoning"
+        # Non-[priv] message: classify complexity and route accordingly
+        chat_id = extract_chat_id(data)
+        user_content = msgs[last_user_idx].get("content", "") if last_user_idx is not None else ""
+        
+        # Classify the message
+        complexity = classify_complexity(user_content)
+        
+        # Log classification decision
+        print(f"[PrivacyRouter] >>> Classification: {complexity} (chat_id={chat_id})", flush=True)
+        
+        # Route based on complexity
+        if complexity == "complex":
+            print("[PrivacyRouter] >>> Complex query -> cloud-complex (Qwen 480B)", flush=True)
+            data["model"] = "cloud-complex"
+        else:
+            print("[PrivacyRouter] >>> Simple query -> cloud-simple (Qwen 3.5 397B)", flush=True)
+            data["model"] = "cloud-simple"
 
     return data
 
@@ -117,6 +331,16 @@ class PrivacyRouter(CustomLogger):
         print(f"[PrivacyRouter] RESPONSES HOOK CALLED call_type={call_type}", flush=True)
         return _route(data)
 
+
+# Hook to store assistant responses in local memory
+async def store_assistant_response(chat_id: str, content: str):
+    """Store assistant response in local memory after successful generation."""
+    if LOCAL_MEMORY_ENABLED:
+        try:
+            store_message(chat_id, "assistant", content)
+            print(f"[PrivacyRouter] Stored assistant response in local memory: {chat_id}", flush=True)
+        except Exception as e:
+            print(f"[PrivacyRouter] Failed to store assistant response: {e}", flush=True)
 
 proxy_handler_instance = PrivacyRouter()
 print(f"[PrivacyRouter] INSTANCE READY: {proxy_handler_instance}", flush=True)
