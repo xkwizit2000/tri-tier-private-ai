@@ -185,6 +185,68 @@ def classify_complexity(message_content) -> str:
         print(f"[PrivacyRouter] Classification failed: {e} -> fallback to simple", flush=True)
         return "simple"  # Fallback to simple if classification fails
 
+def _extract_user_message_text(content) -> str:
+    """Extract the actual user message text from content that may include OpenClaw metadata wrapper.
+    
+    OpenClaw wraps user messages with metadata like:
+    Conversation info (untrusted metadata):
+    ```json
+    {...}
+    ```
+    
+    Sender (untrusted metadata):
+    ```json
+    {...}
+    ```
+    
+    The actual user message comes AFTER these metadata blocks.
+    """
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        # Extract text from list parts
+        text_parts = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") in ("text", "input_text"):
+                text_parts.append(part.get("text", ""))
+            elif isinstance(part, str):
+                text_parts.append(part)
+        text = '\n'.join(text_parts)
+    else:
+        text = str(content)
+    
+    # Strategy: Find all metadata blocks and extract what comes after them
+    # Metadata blocks are marked by headers like "Conversation info (untrusted metadata):" or "Sender (untrusted metadata):"
+    # followed by ```json ... ```
+    
+    metadata_headers = [
+        'Conversation info (untrusted metadata):',
+        'Sender (untrusted metadata):',
+    ]
+    
+    # Find the position after all metadata blocks
+    remaining_text = text
+    for header in metadata_headers:
+        if header in remaining_text:
+            # Find the header and skip past the JSON block
+            idx = remaining_text.find(header)
+            if idx >= 0:
+                # Find the ```json marker after the header
+                json_start = remaining_text.find('```', idx)
+                if json_start >= 0:
+                    # Find the closing ```
+                    json_end = remaining_text.find('```', json_start + 3)
+                    if json_end >= 0:
+                        remaining_text = remaining_text[json_end + 3:].lstrip()
+    
+    # After removing all metadata blocks, remaining_text should be the user message
+    if remaining_text.strip():
+        return remaining_text.strip()
+    
+    # Fallback: return original text
+    return text
+
+
 def _route(data):
     print(f"[PrivacyRouter] >>> ROUTE keys={list(data.keys())} model_in={data.get('model')!r}", flush=True)
 
@@ -199,34 +261,32 @@ def _route(data):
     if last_user_idx is not None:
         content = msgs[last_user_idx].get("content", "")
         print(f"[PrivacyRouter] >>> DEBUG: Raw content type: {type(content)}", flush=True)
+        
+        # Extract the actual user message text (may include OpenClaw metadata wrapper)
+        user_text = _extract_user_message_text(content)
+        print(f"[PrivacyRouter] >>> DEBUG: Extracted user text: '{user_text[:100]}...'", flush=True)
+        
         if isinstance(content, str):
-            # Check only the beginning of the content for [priv] prefix
-            is_private = bool(PRIV_PREFIX.search(content))
-            # Debug: log what we're checking
-            check_content = content[:100]
-            match = PRIV_PREFIX.search(content)
+            # Check the extracted user text for [priv] prefix
+            is_private = bool(PRIV_PREFIX.search(user_text))
+            match = PRIV_PREFIX.search(user_text)
             if match:
-                print(f"[PrivacyRouter] >>> FOUND [priv] match at start: '{match.group()}'", flush=True)
-            print(f"[PrivacyRouter] >>> Checking content for [priv] at start: {check_content}... match={is_private}", flush=True)
+                print(f"[PrivacyRouter] >>> FOUND [priv] match in user text: '{match.group()}'", flush=True)
+            print(f"[PrivacyRouter] >>> Checking user text for [priv]: {user_text[:100]}... match={is_private}", flush=True)
         elif isinstance(content, list):
-            print(f"[PrivacyRouter] >>> DEBUG: Content is list, checking first part only...", flush=True)
-            # For list content, check only the first part and only at the beginning
-            if content and isinstance(content[0], dict) and content[0].get("type") in ("text", "input_text"):
-                text_content = content[0].get("text", "")
-                check_content = text_content[:100]
-                match = PRIV_PREFIX.search(text_content)
-                if match:
-                    print(f"[PrivacyRouter] >>> FOUND [priv] match at start: '{match.group()}'", flush=True)
-                    is_private = True
-                print(f"[PrivacyRouter] >>> Checking first part for [priv] at start: {check_content}... match={is_private}", flush=True)
-            else:
-                print(f"[PrivacyRouter] >>> DEBUG: First part is not text type", flush=True)
+            print(f"[PrivacyRouter] >>> DEBUG: Content is list, checking extracted user text...", flush=True)
+            # Check the extracted user text for [priv] prefix
+            is_private = bool(PRIV_PREFIX.search(user_text))
+            match = PRIV_PREFIX.search(user_text)
+            if match:
+                print(f"[PrivacyRouter] >>> FOUND [priv] match in user text: '{match.group()}'", flush=True)
+            print(f"[PrivacyRouter] >>> Checking user text for [priv]: {user_text[:100]}... match={is_private}", flush=True)
         else:
             print(f"[PrivacyRouter] >>> DEBUG: Unexpected content type: {type(content)}", flush=True)
     else:
         print(f"[PrivacyRouter] >>> DEBUG: No last user message found", flush=True)
 
-    print(f"[PrivacyRouter] >>> private={is_private} (checked last user message only)", flush=True)
+    print(f"[PrivacyRouter] >>> private={is_private} (checked extracted user text)", flush=True)
 
     if is_private:
         print("[PrivacyRouter] *** [priv] -> local-private", flush=True)
