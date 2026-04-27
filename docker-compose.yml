@@ -41,6 +41,7 @@ services:
         ipv4_address: 172.30.0.3
     volumes:
       - ./litellm_config.yaml:/app/config.yaml:ro
+      - ./utils:/app/utils:ro
       - ./router_hook.py:/app/router_hook.py:ro
       - ./entrypoint.py:/app/entrypoint.py:ro
       - ./local_memory.py:/app/local_memory.py:ro
