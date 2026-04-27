@@ -2,13 +2,16 @@ import json
 import logging
 import re
 import urllib.request
+import time
 from litellm.integrations.custom_logger import CustomLogger
+
+# Import utility functions
+from utils.privacy import _extract_user_message_text
 
 # Simple in-memory cache for classification results
 CLASSIFICATION_CACHE = {}
 CACHE_MAX_SIZE = 100
 CACHE_TTL_SECONDS = 300  # 5 minutes
-import time
 
 # Import local memory module for [priv] conversation storage
 try:
@@ -99,20 +102,10 @@ def classify_complexity(message_content) -> str:
     Returns "simple" or "complex".
     Falls back to "simple" if classification fails.
     """
-    # Convert list content to string (Telegram messages arrive as lists)
-    if isinstance(message_content, list):
-        # Extract text from list parts
-        text_parts = []
-        for part in message_content:
-            if isinstance(part, dict) and part.get("type") in ("text", "input_text"):
-                text_parts.append(part.get("text", ""))
-            elif isinstance(part, str):
-                text_parts.append(part)
-        message_str = "\n".join(text_parts)
-        print(f"[PrivacyRouter] Extracted text from list: '{message_str[:50]}...' (len={len(message_str)})", flush=True)
-    else:
-        message_str = str(message_content)
-        print(f"[PrivacyRouter] Content is string: '{message_str[:50]}...' (len={len(message_str)})", flush=True)
+    # FIRST: Extract the actual user message text (strip OpenClaw metadata wrapper)
+    user_text = _extract_user_message_text(message_content)
+    print(f"[PrivacyRouter] classify_complexity: Extracted user text: '{user_text[:50]}...' (len={len(user_text)})", flush=True)
+    message_str = user_text
     
     # Skip classification for very short messages (likely greetings/simple acks)
     if len(message_str.strip()) < 10:
@@ -142,11 +135,7 @@ def classify_complexity(message_content) -> str:
         request_data = {
             "model": CLASSIFIER_MODEL,
             "prompt": prompt,
-            "stream": False,
-            "options": {
-                "temperature": 0.1,  # Low temperature for consistent classification
-                "num_predict": 10    # Only need a few tokens
-            }
+            "stream": False
         }
         
         req = urllib.request.Request(
@@ -155,20 +144,46 @@ def classify_complexity(message_content) -> str:
             headers={'Content-Type': 'application/json'}
         )
         
-        with urllib.request.urlopen(req, timeout=6) as response:
-            result = json.loads(response.read().decode('utf-8'))
-            """
-            fix AttributeError: 'list' object has no attribute 'strip' 
-            by converting into string """
-            classification = str(result.get("response", "simple")).strip().lower()
+        try:
+            with urllib.request.urlopen(req, timeout=30) as response:
+                result = json.loads(response.read().decode('utf-8'))
+                # Ollama returns 'response' field with the generated text
+                raw_response = result.get("response", "")
+                
+                # DEBUG: Log the raw Ollama response
+                print(f"[PrivacyRouter] Ollama raw response: '{raw_response}'", flush=True)
+                
+                if not raw_response:
+                    print(f"[PrivacyRouter] Ollama returned empty response, fallback to simple", flush=True)
+                    result = "simple"
+                else:
+                    classification = raw_response.strip().lower()
+                    # Extract just "simple" or "complex" from response
+                    if "complex" in classification:
+                        result = "complex"
+                        print(f"[PrivacyRouter] Classification result: complex", flush=True)
+                    else:
+                        result = "simple"
+                        print(f"[PrivacyRouter] Classification result: simple", flush=True)
             
-            # Extract just "simple" or "complex" from response
-            if "complex" in classification:
-                result = "complex"
-            else:
-                result = "simple"
+            # Cache the result (success path)
+            if len(CLASSIFICATION_CACHE) >= CACHE_MAX_SIZE:
+                # Remove oldest entry if cache is full
+                oldest_key = min(CLASSIFICATION_CACHE.keys(), key=lambda k: CLASSIFICATION_CACHE[k]['timestamp'])
+                del CLASSIFICATION_CACHE[oldest_key]
             
-            # Cache the result
+            CLASSIFICATION_CACHE[message_key] = {
+                'result': result,
+                'timestamp': current_time
+            }
+            
+            return result
+            
+        except Exception as e:
+            print(f"[PrivacyRouter] Classification request failed: {e}, fallback to simple", flush=True)
+            result = "simple"
+            
+            # Cache the result (error path)
             if len(CLASSIFICATION_CACHE) >= CACHE_MAX_SIZE:
                 # Remove oldest entry if cache is full
                 oldest_key = min(CLASSIFICATION_CACHE.keys(), key=lambda k: CLASSIFICATION_CACHE[k]['timestamp'])
@@ -184,67 +199,6 @@ def classify_complexity(message_content) -> str:
     except Exception as e:
         print(f"[PrivacyRouter] Classification failed: {e} -> fallback to simple", flush=True)
         return "simple"  # Fallback to simple if classification fails
-
-def _extract_user_message_text(content) -> str:
-    """Extract the actual user message text from content that may include OpenClaw metadata wrapper.
-    
-    OpenClaw wraps user messages with metadata like:
-    Conversation info (untrusted metadata):
-    ```json
-    {...}
-    ```
-    
-    Sender (untrusted metadata):
-    ```json
-    {...}
-    ```
-    
-    The actual user message comes AFTER these metadata blocks.
-    """
-    if isinstance(content, str):
-        text = content
-    elif isinstance(content, list):
-        # Extract text from list parts
-        text_parts = []
-        for part in content:
-            if isinstance(part, dict) and part.get("type") in ("text", "input_text"):
-                text_parts.append(part.get("text", ""))
-            elif isinstance(part, str):
-                text_parts.append(part)
-        text = '\n'.join(text_parts)
-    else:
-        text = str(content)
-    
-    # Strategy: Find all metadata blocks and extract what comes after them
-    # Metadata blocks are marked by headers like "Conversation info (untrusted metadata):" or "Sender (untrusted metadata):"
-    # followed by ```json ... ```
-    
-    metadata_headers = [
-        'Conversation info (untrusted metadata):',
-        'Sender (untrusted metadata):',
-    ]
-    
-    # Find the position after all metadata blocks
-    remaining_text = text
-    for header in metadata_headers:
-        if header in remaining_text:
-            # Find the header and skip past the JSON block
-            idx = remaining_text.find(header)
-            if idx >= 0:
-                # Find the ```json marker after the header
-                json_start = remaining_text.find('```', idx)
-                if json_start >= 0:
-                    # Find the closing ```
-                    json_end = remaining_text.find('```', json_start + 3)
-                    if json_end >= 0:
-                        remaining_text = remaining_text[json_end + 3:].lstrip()
-    
-    # After removing all metadata blocks, remaining_text should be the user message
-    if remaining_text.strip():
-        return remaining_text.strip()
-    
-    # Fallback: return original text
-    return text
 
 
 def _route(data):
