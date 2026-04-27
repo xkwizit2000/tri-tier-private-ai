@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.0.2] - 2026-04-27 - Classification Improvements & Code Refactoring
+
+**Enhanced classification robustness and refactored code structure** (2026-04-27):
+  - **Problem**: Classification timeouts and limited error handling in `classify_complexity()` function
+  - **Solution**: 
+    - Increased Ollama API timeout from 6 to 30 seconds to prevent timeout failures
+    - Enhanced error handling with detailed logging for debugging
+    - Improved response parsing with explicit checking for empty responses
+    - Added debug logging for raw Ollama responses to aid troubleshooting
+    - Better caching logic in both success and error paths
+  - **Refactoring**:
+    - Moved `_extract_user_message_text()` to dedicated `utils/privacy.py` module
+    - Renamed function to `extract_user_message_text()` for clarity
+    - Maintained backward compatibility with `_extract_user_message_text()` alias
+    - Clean imports in `router_hook.py` from utils module
+  - **Files**: `/home/deploy/tri-tier-private-ai/router_hook.py`, `/home/deploy/tri-tier-private-ai/utils/privacy.py`, `/home/deploy/tri-tier-private-ai/utils/__init__.py`
+  - **Result**: More robust classification with better timeout handling, improved debugging capabilities, and cleaner code organization
+
 ## [2.0.1] - 2026-04-26 - Bugfix Issue #5
 
 **[priv] prefix detection with OpenClaw metadata wrappers** (2026-04-26):

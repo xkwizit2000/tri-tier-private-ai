@@ -14,6 +14,9 @@ def extract_user_message_text(content) -> str:
     {...}
     ```
     
+    OpenClaw prepends untrusted metadata before the actual user text.
+    Strip known wrapper blocks so privacy detection only sees the real message.
+
     The actual user message comes AFTER these metadata blocks.
     """
     if isinstance(content, str):
@@ -34,9 +37,6 @@ def extract_user_message_text(content) -> str:
     # Metadata blocks are marked by headers like "Conversation info (untrusted metadata):" or "Sender (untrusted metadata):"
     # followed by ```json ... ```
     
-    # OpenClaw prepends untrusted metadata before the actual user text.
-    # Strip known wrapper blocks so privacy detection only sees the real message.
-
     metadata_headers = [
         'Conversation info (untrusted metadata):',
         'Sender (untrusted metadata):',
