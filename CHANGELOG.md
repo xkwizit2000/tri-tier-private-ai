@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     - Improved response parsing with explicit checking for empty responses
     - Added debug logging for raw Ollama responses to aid troubleshooting
     - Better caching logic in both success and error paths
-  - **Refactoring**:
+  - **Refactoring**: See pr#6 for details
     - Moved `_extract_user_message_text()` to dedicated `utils/privacy.py` module
     - Renamed function to `extract_user_message_text()` for clarity
     - Maintained backward compatibility with `_extract_user_message_text()` alias
