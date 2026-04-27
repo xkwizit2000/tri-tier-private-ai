@@ -6,7 +6,7 @@ import time
 from litellm.integrations.custom_logger import CustomLogger
 
 # Import utility functions
-from utils.privacy import _extract_user_message_text
+from utils.privacy import extract_user_message_text
 
 # Simple in-memory cache for classification results
 CLASSIFICATION_CACHE = {}
@@ -103,7 +103,7 @@ def classify_complexity(message_content) -> str:
     Falls back to "simple" if classification fails.
     """
     # FIRST: Extract the actual user message text (strip OpenClaw metadata wrapper)
-    user_text = _extract_user_message_text(message_content)
+    user_text = extract_user_message_text(message_content)
     print(f"[PrivacyRouter] classify_complexity: Extracted user text: '{user_text[:50]}...' (len={len(user_text)})", flush=True)
     message_str = user_text
     
@@ -198,13 +198,7 @@ def classify_complexity(message_content) -> str:
     
     except Exception as e:
         print(f"[PrivacyRouter] Classification failed: {e} -> fallback to simple", flush=True)
-        return "simple"  # Fallback to simple if classification fails
-
-
-def _route(data):
-    print(f"[PrivacyRouter] >>> ROUTE keys={list(data.keys())} model_in={data.get('model')!r}", flush=True)
-
-    msgs = data.get("messages") or []
+        return "simple"  # Fallback to simple if classification fails    msgs = data.get("messages") or []
     last_user_idx = next(
         (i for i in range(len(msgs) - 1, -1, -1)
          if isinstance(msgs[i], dict) and msgs[i].get("role") == "user"),
@@ -217,7 +211,7 @@ def _route(data):
         print(f"[PrivacyRouter] >>> DEBUG: Raw content type: {type(content)}", flush=True)
         
         # Extract the actual user message text (may include OpenClaw metadata wrapper)
-        user_text = _extract_user_message_text(content)
+        user_text = extract_user_message_text(content)
         print(f"[PrivacyRouter] >>> DEBUG: Extracted user text: '{user_text[:100]}...'", flush=True)
         
         if isinstance(content, str):

@@ -1,4 +1,6 @@
-def _extract_user_message_text(content) -> str:
+from typing import Any
+
+def extract_user_message_text(content) -> str:
     """Extract the actual user message text from content that may include OpenClaw metadata wrapper.
     
     OpenClaw wraps user messages with metadata like:
@@ -12,6 +14,9 @@ def _extract_user_message_text(content) -> str:
     {...}
     ```
     
+    OpenClaw prepends untrusted metadata before the actual user text.
+    Strip known wrapper blocks so privacy detection only sees the real message.
+
     The actual user message comes AFTER these metadata blocks.
     """
     if isinstance(content, str):
@@ -58,3 +63,7 @@ def _extract_user_message_text(content) -> str:
     
     # Fallback: return original text
     return text
+
+def _extract_user_message_text(content: Any) -> str:
+    """Backward-compatible alias for older imports and tests."""
+    return extract_user_message_text(content)
