@@ -120,13 +120,25 @@ tritier/
 ### 1. Install dependencies
 
 ```bash
+#install docker repo
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc]
+https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt install ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+#autoremove, update and upgrade apt packages
+sudo apt autoremove
 sudo apt update && sudo apt upgrade -y
-sudo apt install -y docker.io docker-compose-plugin ufw curl
+
+#install dependencies 
+sudo apt install -y docker.io docker-compose-plugin ufw
 ```
 
 ### 2. Install Tailscale
 
 ```bash
+# Not necessary is you don't intend to access openclaw UI. Skip to firewall setting
 curl -fsSL https://tailscale.com/install.sh | sh
 sudo tailscale up
 ```
@@ -139,7 +151,7 @@ Note your Tailscale IP - it will look like `100.x.x.x`. This is the only address
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
 sudo ufw allow ssh
-sudo ufw allow in on tailscale0
+sudo ufw allow in on tailscale0 # Only if tailscale is installed and used.  Otherwise, skip
 sudo ufw enable
 sudo ufw status verbose
 ```
