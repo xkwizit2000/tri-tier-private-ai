@@ -194,8 +194,7 @@ Populate keys
 
 ```bash
 # Generate a secure LiteLLM master key
-openssl rand -hex 32
-# Paste the above output into .secrets/litellm_master_key
+openssl rand -hex 32 > litellm_master_key 
 
 # Paste output as LITELLM_MASTER_KEY
 # Paste your Together AI key in .secrets/together_key
