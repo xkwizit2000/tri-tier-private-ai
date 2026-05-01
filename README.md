@@ -145,7 +145,7 @@ sudo tailscale up
 
 Note your Tailscale IP - it will look like `100.x.x.x`. This is the only address you will use to access the stack.
 
-### 3. Lock down the firewall
+### 3. Lock down the firewall to allow only ssh access to the server
 
 ```bash
 sudo ufw default deny incoming
@@ -154,6 +154,17 @@ sudo ufw allow ssh
 sudo ufw allow in on tailscale0 # Only if tailscale is installed and used.  Otherwise, skip
 sudo ufw enable
 sudo ufw status verbose
+
+# Expected ending output
+#Status: active
+#Logging: on (low)
+#Default: deny (incoming), allow (outgoing), deny (routed)
+#New profiles: skip
+#
+#To                         Action      From
+#--                         ------      ----
+#22/tcp                     ALLOW IN    Anywhere
+#22/tcp (v6)                ALLOW IN    Anywhere (v6)
 ```
 
 > **Important:** Run `ufw allow ssh` before enabling UFW or you will lose access to your VPS.
