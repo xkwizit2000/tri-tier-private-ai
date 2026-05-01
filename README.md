@@ -132,7 +132,7 @@ sudo apt autoremove
 sudo apt update && sudo apt upgrade -y
 
 #install dependencies 
-sudo apt install -y docker.io docker-compose-plugin ufw
+sudo apt install -y docker.io docker-compose-plugin ufw git
 ```
 
 ### 2. Install Tailscale
@@ -181,18 +181,24 @@ openclaw --version
 ### 5. Configure environment
 
 ```bash
-mkdir -p ~/tritier && cd ~/tritier
+#clone this repo
+git clone git@github.com:xkwizit2000/tri-tier-private-ai.git
+ln -s tri-tier-private-ai tritier
+cd ~/tritier
 cp .env.template .env
+
+mkdir .secrets ; cd .secrets
 ```
 
-Edit `.env` and fill in your keys:
+Populate keys
 
 ```bash
 # Generate a secure LiteLLM master key
 openssl rand -hex 32
+# Paste the above output into .secrets/litellm_master_key
 
 # Paste output as LITELLM_MASTER_KEY
-# Paste your Together AI key as TOGETHER_API_KEY
+# Paste your Together AI key in .secrets/together_key
 ```
 
 ### 6. Start the containers
@@ -208,7 +214,7 @@ docker compose ps        # Both services should show "healthy"
 # Privacy model (local)
 docker exec -it ollama ollama pull gemma4:e4b
 
-# Classification model (lightweight, fast)
+# Classification model (lightweight, fast) for routing p4ompts to appropriate models
 docker exec -it ollama ollama pull gemma4:e2b
 ```
 
@@ -216,7 +222,14 @@ This downloads approximately 4-5GB total. Allow 5–10 minutes depending on your
 
 ### 8. Connect OpenClaw to LiteLLM
 
-Edit `~/.openclaw/openclaw.json`:
+Copy openclaw.json to `~/.openclaw/openclaw.json`:
+
+```bash
+mkdir -p ~/.openclaw
+cp openclaw.json ~/.openclaw/openclaw.json
+```
+
+Edit `~/.openclaw/openclaw.json` and update YOUR_LITELLM_MASTER_KEY with the contents from ~/tritier/.secrets/litellm_master_key:
 
 ```json
 {
