@@ -199,12 +199,16 @@ def classify_complexity(message_content) -> str:
     except Exception as e:
         print(f"[PrivacyRouter] Classification failed: {e} -> fallback to simple", flush=True)
         return "simple"  # Fallback to simple if classification fails    msgs = data.get("messages") or []
+
+def _route(data):
+    print(f"[PrivacyRouter] >>> ROUTE keys={list(data.keys())} model_in={data.get('model')!r}", flush=True)
+
+    msgs = data.get("messages") or []
     last_user_idx = next(
         (i for i in range(len(msgs) - 1, -1, -1)
          if isinstance(msgs[i], dict) and msgs[i].get("role") == "user"),
         None,
     )
-
     is_private = False
     if last_user_idx is not None:
         content = msgs[last_user_idx].get("content", "")
